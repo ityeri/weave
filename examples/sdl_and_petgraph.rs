@@ -16,7 +16,7 @@ use sdl2::{
 use weave::{
     PhysicalGraph,
     stored_graph::{StoredGraph, StoredNode},
-    updater::{MultiThreadUpdater, Updater},
+    updater::{DefaultUpdater, Updater},
 };
 
 struct PhsicalGraphData {
@@ -92,7 +92,7 @@ fn main() {
 
     let mut graph: StableGraph<PhsicalGraphData, (), Directed> = StableGraph::new();
 
-    let graph_updater = MultiThreadUpdater::default_setting();
+    let graph_updater = DefaultUpdater::default_setting();
 
     let random_radius: f64 = 0.00001;
     let center_node1 = graph.add_node(PhsicalGraphData::random(random_radius));

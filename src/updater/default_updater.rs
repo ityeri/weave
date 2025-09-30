@@ -3,13 +3,12 @@ use crate::{
     PhysicalGraph,
     stored_graph::{StoredGraph, StoredNode},
 };
-use glam::DVec2;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
     collections::{HashMap, HashSet},
     hash::Hash,
 };
-pub struct MultiThreadUpdater {
+pub struct DefaultUpdater {
     pub elasticity: f64,
     pub velocity_damping: f64,
     pub dt_amplification: f64,
@@ -19,7 +18,7 @@ pub struct MultiThreadUpdater {
     pub protect_radius_gap: f64,
 }
 
-impl MultiThreadUpdater {
+impl DefaultUpdater {
     pub fn default_setting() -> Self {
         Self {
             elasticity: 2.0,
@@ -115,7 +114,7 @@ impl MultiThreadUpdater {
     }
 }
 
-impl Updater for MultiThreadUpdater {
+impl Updater for DefaultUpdater {
     fn update<K: Copy + Hash + Eq + Send + Sync>(
         &self,
         graph: impl PhysicalGraph<K>,
