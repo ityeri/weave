@@ -6,10 +6,10 @@ edition = "2024"
 [dependencies]
 glam = "0.30.8"
 petgraph = "0.8.2"
-rand = "0.9.2"
 rayon = "1.11.0"
 
 [dev-dependencies]
+rand = "0.8.5"
 sdl2 = "0.38.0"
 scrollrs = { git = "https://github.com/ityeri/scrollrs.git", version = "0.1.0" }
 clock = { git = "https://github.com/ityeri/clock.git", version = "0.1.0" }
