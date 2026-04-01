@@ -1,16 +1,19 @@
-use glam::DVec2;
-use std::hash::Hash;
+use glam::Vec2;
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
-pub trait PhysicalGraph<K: Copy + Hash + Eq> {
-    // CHES
-    fn get_all_nodes(&self) -> impl Iterator<Item = K>;
+pub trait NodeKey: Copy + Eq + Hash + Send + Sync {}
+impl<T: Copy + Hash + Eq + Send + Sync> NodeKey for T {}
 
-    fn get_position(&self, node_id: K) -> DVec2;
-    fn get_velocity(&self, node_id: K) -> DVec2;
+pub struct PhysicalGraph<K: NodeKey> {
+    pub nodes: HashMap<K, PhysicalNode<K>>,
+}
 
-    fn get_incomings(&self, node_id: K) -> impl Iterator<Item = K>;
-    fn get_outgoings(&self, node_id: K) -> impl Iterator<Item = K>;
-
-    fn get_in_degree(&self, node_id: K) -> u32;
-    fn get_out_degree(&self, node_id: K) -> u32;
+pub struct PhysicalNode<K: NodeKey> {
+    pub incomings: HashSet<K>,
+    pub outgoings: HashSet<K>,
+    pub position: Vec2,
+    pub prev_position: Vec2,
 }
