@@ -1,5 +1,8 @@
 use glam::Vec2;
-use std::{collections::HashMap, hash::Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 pub trait NodeKey: Copy + Eq + Hash + Send + Sync {}
 impl<T: Copy + Hash + Eq + Send + Sync> NodeKey for T {}
@@ -9,8 +12,8 @@ pub struct PhysicalGraph<K: NodeKey> {
 }
 
 pub struct PhysicalNode<K: NodeKey> {
-    pub incomings: Vec<K>,
-    pub outgoings: Vec<K>,
+    pub incomings: HashSet<K>,
+    pub outgoings: HashSet<K>,
     pub position: Vec2,
     pub prev_position: Vec2,
 }
