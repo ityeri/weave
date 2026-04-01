@@ -1,7 +1,7 @@
 use clock::Clock;
 use glam::DVec2;
 use petgraph::{
-    Directed, Direction, Undirected,
+    Directed, Direction,
     stable_graph::{NodeIndex, StableGraph},
 };
 use rand::Rng;
@@ -15,7 +15,6 @@ use sdl2::{
 };
 use weave::{
     PhysicalGraph,
-    stored_graph::{StoredGraph, StoredNode},
     updater::{DefaultUpdater, Updater},
 };
 
@@ -100,13 +99,13 @@ fn main() {
 
     graph.add_edge(center_node1, center_node2, ()); // graph.add_edge(center_node2, center_node1, ());
 
-    for i in 0..3000 {
+    for i in 0..300 {
         let sub_node = graph.add_node(PhsicalGraphData::random(random_radius));
         graph.add_edge(sub_node, center_node1, ());
         // graph.add_edge(center_node1, sub_node, ());
     }
 
-    for i in 0..3000 {
+    for i in 0..300 {
         let sub_node = graph.add_node(PhsicalGraphData::random(random_radius));
         graph.add_edge(sub_node, center_node2, ());
         // graph.add_edge(center_node2, sub_node, ());
