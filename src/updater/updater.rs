@@ -1,10 +1,5 @@
-use crate::{PhysicalGraph, stored_graph::StoredGraph};
-use std::hash::Hash;
+use crate::{NodeKey, PhysicalGraph};
 
 pub trait Updater {
-    fn update<K: Copy + Hash + Eq + Send + Sync>(
-        &self,
-        graph: impl PhysicalGraph<K>,
-        dt: f64,
-    ) -> StoredGraph<K>;
+    fn update<K: NodeKey>(&self, graph: PhysicalGraph<K>, dt: f32) -> PhysicalGraph<K>;
 }
