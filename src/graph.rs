@@ -12,6 +12,7 @@ pub struct PhysicalGraph<K: NodeKey> {
 }
 
 pub struct PhysicalNode<K: NodeKey> {
+    pub key: K,
     pub incomings: HashSet<K>,
     pub outgoings: HashSet<K>,
     pub position: Vec2,
