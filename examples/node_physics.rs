@@ -3,7 +3,10 @@ use std::collections::{HashMap, HashSet};
 use glam::{DVec2, Vec2};
 use macroquad::{
     color,
-    input::{MouseButton, is_mouse_button_down, mouse_position, mouse_wheel},
+    input::{
+        KeyCode, MouseButton, is_key_down, is_key_pressed, is_mouse_button_down, mouse_position,
+        mouse_wheel,
+    },
     shapes::draw_rectangle,
     text::draw_text,
     time::{get_fps, get_frame_time},
@@ -67,20 +70,25 @@ async fn main() {
     let center_node1 = graph.add_node(Body::random(random_radius));
     let center_node2 = graph.add_node(Body::random(random_radius));
 
-    for _ in 0..300 {
+    for _ in 0..100 {
         let sub_node = graph.add_node(Body::random(random_radius));
         graph.add_edge(sub_node, center_node1, ());
     }
 
-    for _ in 0..300 {
+    for _ in 0..100 {
         let sub_node = graph.add_node(Body::random(random_radius));
         graph.add_edge(sub_node, center_node2, ());
     }
 
+    graph.add_edge(center_node1, center_node2, ());
+    graph.add_edge(center_node2, center_node1, ());
+
     let fixed_dt = 1.0 / 100.0;
     let updater = DefaultUpdater::default_setting();
+    let mut update_running = false;
 
     let mut adaptor = scrollrs::ScrollAdaptor::new(0.0, 0.0, None, None, None);
+    adaptor = adaptor.set_zoom(0.1);
 
     let mut last_mouse_pos = mouse_position();
     let wheel_sensitivity = 0.01;
@@ -132,58 +140,18 @@ async fn main() {
                 .collect::<HashMap<NodeIndex, PhysicalNode<NodeIndex>>>(),
         );
 
-        let updated_graph = updater.update(physical_graph, fixed_dt);
+        if is_key_pressed(KeyCode::Space) {
+            update_running = !update_running;
+        }
 
-        let edges = updated_graph
-            .nodes
-            .keys()
-            .copied()
-            .flat_map(|node_index| {
-                let incoming_edges = updated_graph
-                    .nodes
-                    .get(&node_index)
-                    .unwrap()
-                    .incomings
-                    .iter()
-                    .copied()
-                    .map(move |incoming_node_index| HasheableEdge {
-                        source: incoming_node_index,
-                        target: node_index,
-                    });
+        if update_running {
+            let updated_graph = updater.update(physical_graph, fixed_dt);
 
-                let outgoing_edges = updated_graph
-                    .nodes
-                    .get(&node_index)
-                    .unwrap()
-                    .incomings
-                    .iter()
-                    .copied()
-                    .map(move |outgoing_node| HasheableEdge {
-                        source: node_index,
-                        target: outgoing_node,
-                    });
-
-                incoming_edges.chain(outgoing_edges)
-            })
-            .collect::<HashSet<HasheableEdge>>();
-
-        let elements = updated_graph
-            .nodes
-            .keys()
-            .copied()
-            .map(|node_index| Element::Node {
-                weight: Body {
-                    position: updated_graph.nodes.get(&node_index).unwrap().position,
-                    prev_position: updated_graph.nodes.get(&node_index).unwrap().prev_position,
-                },
-            })
-            .chain(edges.iter().map(|edge| Element::Edge {
-                source: edge.source.index(),
-                target: edge.target.index(),
-                weight: (),
-            }));
-
-        graph = StableGraph::from_elements(elements);
+            for (node_index, node) in updated_graph.nodes {
+                graph[node_index].position = node.position;
+                graph[node_index].prev_position = node.prev_position;
+            }
+        }
 
         clear_background(color::BLACK);
 
@@ -192,13 +160,17 @@ async fn main() {
                 graph[node_index].position.x as f64,
                 graph[node_index].position.y as f64,
             ));
-            let node_radius = adaptor.project_scale(5.0) as f32;
+            let degrees = graph
+                .edges_directed(node_index, Direction::Incoming)
+                .count() as f64;
+            let radius = 1.0 + degrees * 0.03;
+            let projcted_radius = adaptor.project_scale(radius) as f32;
 
             draw_rectangle(
-                position.x as f32 - node_radius,
-                position.y as f32 - node_radius,
-                node_radius * 2.0,
-                node_radius * 2.0,
+                position.x as f32 - projcted_radius,
+                position.y as f32 - projcted_radius,
+                projcted_radius * 2.0,
+                projcted_radius * 2.0,
                 color::WHITE,
             );
         });

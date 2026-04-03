@@ -33,27 +33,53 @@ impl DefaultUpdater {
         node_key: K,
         dt: f32,
     ) -> PhysicalNode<K> {
-        let self_node = graph.nodes.get(&node_key).unwrap();
+        let node = graph.nodes.get(&node_key).unwrap();
 
-        let mass = self.min_mass + self_node.incomings.len() as f32;
+        let mass = self.min_mass + node.incomings.len() as f32;
 
         let force = graph
             .nodes
             .values()
             .filter(|&node| node.key != node_key)
-            .map(|node| -> Vec2 { Vec2::new(0.1, 0.0) })
+            .map(|other_node| -> Vec2 {
+                let other_node_mass = self.min_mass + other_node.incomings.len() as f32;
+
+                if node.incomings.contains(&other_node.key)
+                    || node.outgoings.contains(&other_node.key)
+                {
+                    let diff = other_node.position - node.position;
+
+                    let target_distance =
+                        (node.incomings.len() + other_node.incomings.len()) as f32 * 0.3 + 1.0;
+                    let distance_diff = diff.length() - target_distance;
+
+                    diff.normalize_or_zero() * distance_diff * 20.0 * mass * other_node_mass
+                } else {
+                    let diff = other_node.position - node.position;
+
+                    let min_distance =
+                        (node.incomings.len() + other_node.incomings.len()) as f32 * 0.2 + 2.0;
+
+                    if diff.length() < min_distance {
+                        let distance_diff = min_distance - diff.length();
+
+                        -diff.normalize_or_zero() * distance_diff * mass * other_node_mass * 100.0
+                    } else {
+                        Vec2::ZERO
+                    }
+                }
+            })
             .sum::<Vec2>();
 
-        let acc = force / mass;
-
-        println!("{}", acc);
+        let velocity = node.position - node.prev_position;
+        let acc = force / mass - velocity * 800.0;
 
         PhysicalNode {
             key: node_key,
-            incomings: self_node.incomings.iter().copied().collect::<HashSet<K>>(),
-            outgoings: self_node.outgoings.iter().copied().collect::<HashSet<K>>(),
-            position: 2.0 * self_node.position - self_node.prev_position + acc * dt.powi(2),
-            prev_position: self_node.position,
+            incomings: node.incomings.iter().copied().collect::<HashSet<K>>(),
+            outgoings: node.outgoings.iter().copied().collect::<HashSet<K>>(),
+            position: 2.0 * node.position - node.prev_position + acc * dt.powi(2),
+            prev_position: node.position,
         }
     }
 }
