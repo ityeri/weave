@@ -41,10 +41,12 @@ impl DefaultUpdater {
             .nodes
             .values()
             .filter(|&node| node.key != node_key)
-            .map(|node| -> Vec2 { Vec2::new(0.01, 0.0) })
+            .map(|node| -> Vec2 { Vec2::new(0.1, 0.0) })
             .sum::<Vec2>();
 
         let acc = force / mass;
+
+        println!("{}", acc);
 
         PhysicalNode {
             key: node_key,
