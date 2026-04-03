@@ -11,6 +11,5 @@ rayon = "1.11.0"
 macroquad = "0.4.14"
 petgraph = "0.8.2"
 rand = "0.9.0"
-sdl2 = "0.38.0"
 scrollrs = { git = "https://github.com/ityeri/scrollrs.git", version = "0.1.0" }
 clock = { git = "https://github.com/ityeri/clock.git", version = "0.1.0" }
