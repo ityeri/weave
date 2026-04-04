@@ -1,5 +1,6 @@
+use macroquad::shapes::{draw_circle, draw_line};
+use petgraph::visit::IntoEdgeReferences;
 use std::collections::{HashMap, HashSet};
-
 use glam::{DVec2, Vec2};
 use macroquad::{
     color,
@@ -20,6 +21,7 @@ use petgraph::{
 };
 use rand::Rng;
 use scrollrs::Projector;
+use walkdir::WalkDir;
 use weave::{
     NodeKey, PhysicalGraph, PhysicalNode,
     updater::{DefaultUpdater, Updater},
@@ -61,29 +63,62 @@ struct HasheableEdge {
     target: NodeIndex,
 }
 
+fn build_directory_graph(root_path: &str) -> StableGraph<Body, (), Directed> {
+    let mut graph = StableGraph::<Body, (), Directed>::new();
+    // 경로를 NodeIndex에 매핑하여 부모 노드를 빠르게 찾기 위함
+    let mut path_to_node = HashMap::new();
+
+    // WalkDir로 디렉터리 순회
+    for entry in WalkDir::new(root_path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path().to_path_buf();
+        
+        // 1. 현재 경로를 노드로 추가
+        let current_node = graph.add_node(Body::random(0.000000001));
+        path_to_node.insert(path.clone(), current_node);
+
+        // 2. 부모 디렉터리가 있다면 에지로 연결
+        if let Some(parent_path) = path.parent() {
+            if let Some(&parent_node) = path_to_node.get(parent_path) {
+                // 루트 경로 자체가 부모인 경우를 제외하고 연결 (중복 방지)
+                if parent_path != path {
+                    graph.add_edge(
+                        current_node,
+                        parent_node, 
+                        ()
+                    );
+                }
+            }
+        }
+    }
+
+    graph
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut graph: StableGraph<Body, (), Directed> = StableGraph::new();
+    // let mut graph: StableGraph<Body, (), Directed> = StableGraph::new();
+    //
+    // let random_radius = 100.0;
+    //
+    // let center_node1 = graph.add_node(Body::random(random_radius));
+    // let center_node2 = graph.add_node(Body::random(random_radius));
+    //
+    // for _ in 0..1200 {
+    //     let sub_node = graph.add_node(Body::random(random_radius));
+    //     graph.add_edge(sub_node, center_node1, ());
+    // }
+    //
+    // for _ in 0..1200 {
+    //     let sub_node = graph.add_node(Body::random(random_radius));
+    //     graph.add_edge(sub_node, center_node2, ());
+    // }
+    //
+    // graph.add_edge(center_node1, center_node2, ());
+    // graph.add_edge(center_node2, center_node1, ());
 
-    let random_radius = 100.0;
+    let mut graph = build_directory_graph("/wasans/coding/comshop");
 
-    let center_node1 = graph.add_node(Body::random(random_radius));
-    let center_node2 = graph.add_node(Body::random(random_radius));
-
-    for _ in 0..100 {
-        let sub_node = graph.add_node(Body::random(random_radius));
-        graph.add_edge(sub_node, center_node1, ());
-    }
-
-    for _ in 0..100 {
-        let sub_node = graph.add_node(Body::random(random_radius));
-        graph.add_edge(sub_node, center_node2, ());
-    }
-
-    graph.add_edge(center_node1, center_node2, ());
-    graph.add_edge(center_node2, center_node1, ());
-
-    let fixed_dt = 1.0 / 100.0;
+    let fixed_dt = 1.0 / 60.0;
     let updater = DefaultUpdater::default_setting();
     let mut update_running = false;
 
@@ -91,7 +126,7 @@ async fn main() {
     adaptor = adaptor.set_zoom(0.1);
 
     let mut last_mouse_pos = mouse_position();
-    let wheel_sensitivity = 0.01;
+    let wheel_sensitivity = 0.2;
 
     loop {
         let dt = get_frame_time();
@@ -155,6 +190,29 @@ async fn main() {
 
         clear_background(color::BLACK);
 
+        let line_width = if 1.0 < adaptor.project_scale(0.08) {
+            adaptor.project_scale(0.08)
+        } else {
+            0.5
+        };
+
+        graph.edge_references().for_each(|edge| {
+            let source_position = graph[edge.source()].position;
+            let target_position = graph[edge.target()].position;
+            
+            let source_position = adaptor.project(DVec2::new(source_position.x as f64, source_position.y as f64));
+            let target_position = adaptor.project(DVec2::new(target_position.x as f64, target_position.y as f64));
+
+            draw_line(
+                source_position.x as f32,
+                source_position.y as f32,
+                target_position.x as f32,
+                target_position.y as f32,
+                line_width as f32,
+                color::DARKGRAY
+            );
+        });
+
         graph.node_indices().for_each(|node_index| {
             let position = adaptor.project(DVec2::new(
                 graph[node_index].position.x as f64,
@@ -163,16 +221,19 @@ async fn main() {
             let degrees = graph
                 .edges_directed(node_index, Direction::Incoming)
                 .count() as f64;
-            let radius = 1.0 + degrees * 0.03;
-            let projcted_radius = adaptor.project_scale(radius) as f32;
+            let radius = 0.2 + degrees * 0.02;
+            let projcted_radius = if 1.0 < adaptor.project_scale(radius) {
+                adaptor.project_scale(radius)
+            } else {
+                1.0
+            };
 
-            draw_rectangle(
-                position.x as f32 - projcted_radius,
-                position.y as f32 - projcted_radius,
-                projcted_radius * 2.0,
-                projcted_radius * 2.0,
-                color::WHITE,
-            );
+            draw_circle(
+                position.x as f32,
+                position.y as f32,
+                projcted_radius as f32,
+                color::WHITE
+            )
         });
 
         draw_text(

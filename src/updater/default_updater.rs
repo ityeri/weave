@@ -44,29 +44,26 @@ impl DefaultUpdater {
             .map(|other_node| -> Vec2 {
                 let other_node_mass = self.min_mass + other_node.incomings.len() as f32;
 
+                let min_distance = (mass + other_node_mass) * 0.8 * 0.1 + 3.0;
+                let max_distance = (mass + other_node_mass) * 1.2 * 0.1 + 3.0;
+
+                let diff = other_node.position - node.position;
+
                 if node.incomings.contains(&other_node.key)
                     || node.outgoings.contains(&other_node.key)
                 {
-                    let diff = other_node.position - node.position;
 
-                    let target_distance =
-                        (node.incomings.len() + other_node.incomings.len()) as f32 * 0.3 + 1.0;
-                    let distance_diff = diff.length() - target_distance;
-
-                    diff.normalize_or_zero() * distance_diff * 20.0 * mass * other_node_mass
-                } else {
-                    let diff = other_node.position - node.position;
-
-                    let min_distance =
-                        (node.incomings.len() + other_node.incomings.len()) as f32 * 0.2 + 2.0;
-
-                    if diff.length() < min_distance {
-                        let distance_diff = min_distance - diff.length();
-
-                        -diff.normalize_or_zero() * distance_diff * mass * other_node_mass * 100.0
+                    let distance_diff = if diff.length() < min_distance {
+                        diff.length() - min_distance
+                    } else if max_distance < diff.length() {
+                        diff.length() - max_distance
                     } else {
-                        Vec2::ZERO
-                    }
+                        0.0f32
+                    };
+
+                    diff.normalize_or_zero() * 10.0 * distance_diff * mass * other_node_mass
+                } else {
+                    -diff.normalize_or_zero() * 400.0 * (mass * other_node_mass) / (diff.length().powi(2) + 0.1)
                 }
             })
             .sum::<Vec2>();
