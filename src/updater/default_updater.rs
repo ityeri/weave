@@ -8,6 +8,7 @@ pub struct DefaultUpdater {
     pub base_neighbor_radius: f32,
     pub neighbor_radius: f32,
     pub neighbor_space_ratio: f32,
+    pub mass_amplification: f32,
     pub min_node_mass: f32,
     pub neighbor_edge_elasticity: f32,
     pub non_neighbor_repulsive_force: f32,
@@ -21,6 +22,7 @@ impl DefaultUpdater {
             base_neighbor_radius: 3.0,
             neighbor_radius: 0.1,
             neighbor_space_ratio: 0.2,
+            mass_amplification: 1.0,
             min_node_mass: 0.1,
             neighbor_edge_elasticity: 0.01,
             non_neighbor_repulsive_force: 100.0,
@@ -37,16 +39,18 @@ impl DefaultUpdater {
     ) -> PhysicalNode<K> {
         let node = graph.nodes.get(&node_key).unwrap();
 
-        let mass = self.min_node_mass + node.incomings.len() as f32;
+        let mass = self.min_node_mass + node.incomings.len() as f32 * self.mass_amplification;
 
         let force = graph
             .nodes
             .values()
             .filter(|&node| node.key != node_key)
             .map(|other_node| -> Vec2 {
-                let other_node_mass = self.min_node_mass + other_node.incomings.len() as f32;
+                let other_node_mass =
+                    self.min_node_mass + other_node.incomings.len() as f32 * self.mass_amplification;
 
-                let neighbor_radius = (mass + other_node_mass) * self.neighbor_radius;
+                let neighbor_radius = (node.incomings.len() * other_node.incomings.len()) as f32
+                    * self.neighbor_radius;
 
                 let min_distance = neighbor_radius * (1.0 - self.neighbor_space_ratio / 2.0)
                     + self.base_neighbor_radius;
