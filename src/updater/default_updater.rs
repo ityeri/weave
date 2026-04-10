@@ -5,25 +5,27 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::collections::{HashMap, HashSet};
 
 pub struct DefaultUpdater {
-    pub elasticity: f32,
-    pub velocity_damping: f32,
-    pub dt_amplification: f32,
-    pub edge_length_rate: f32,
-    pub min_mass: f32,
-    pub min_protect_radius: f32,
-    pub protect_radius_gap: f32,
+    pub base_neighbor_radius: f32,
+    pub neighbor_radius: f32,
+    pub neighbor_space_ratio: f32,
+    pub min_node_mass: f32,
+    pub neighbor_edge_elasticity: f32,
+    pub non_neighbor_repulsive_force: f32,
+    pub non_neighbor_distance_softning: f32,
+    pub attenuation_rate: f32,
 }
 
 impl DefaultUpdater {
     pub fn default_setting() -> Self {
         Self {
-            elasticity: 2.0,
-            velocity_damping: 1.0,
-            dt_amplification: 1.0,
-            edge_length_rate: 0.012,
-            min_mass: 1.0,
-            min_protect_radius: 1.0,
-            protect_radius_gap: 0.2,
+            base_neighbor_radius: 3.0,
+            neighbor_radius: 0.1,
+            neighbor_space_ratio: 0.2,
+            min_node_mass: 0.1,
+            neighbor_edge_elasticity: 0.01,
+            non_neighbor_repulsive_force: 100.0,
+            non_neighbor_distance_softning: 0.1,
+            attenuation_rate: 800.0,
         }
     }
 
@@ -35,24 +37,27 @@ impl DefaultUpdater {
     ) -> PhysicalNode<K> {
         let node = graph.nodes.get(&node_key).unwrap();
 
-        let mass = self.min_mass + node.incomings.len() as f32;
+        let mass = self.min_node_mass + node.incomings.len() as f32;
 
         let force = graph
             .nodes
             .values()
             .filter(|&node| node.key != node_key)
             .map(|other_node| -> Vec2 {
-                let other_node_mass = self.min_mass + other_node.incomings.len() as f32;
+                let other_node_mass = self.min_node_mass + other_node.incomings.len() as f32;
 
-                let min_distance = (mass + other_node_mass) * 0.8 * 0.1 + 3.0;
-                let max_distance = (mass + other_node_mass) * 1.2 * 0.1 + 3.0;
+                let neighbor_radius = (mass + other_node_mass) * self.neighbor_radius;
+
+                let min_distance = neighbor_radius * (1.0 - self.neighbor_space_ratio / 2.0)
+                    + self.base_neighbor_radius;
+                let max_distance = neighbor_radius * (1.0 + self.neighbor_space_ratio / 2.0)
+                    + self.base_neighbor_radius;
 
                 let diff = other_node.position - node.position;
 
                 if node.incomings.contains(&other_node.key)
                     || node.outgoings.contains(&other_node.key)
                 {
-
                     let distance_diff = if diff.length() < min_distance {
                         diff.length() - min_distance
                     } else if max_distance < diff.length() {
@@ -61,15 +66,22 @@ impl DefaultUpdater {
                         0.0f32
                     };
 
-                    diff.normalize_or_zero() * 10.0 * distance_diff * mass * other_node_mass
+                    self.neighbor_edge_elasticity
+                        * diff.normalize_or_zero()
+                        * distance_diff
+                        * mass
+                        * other_node_mass
                 } else {
-                    -diff.normalize_or_zero() * 400.0 * (mass * other_node_mass) / (diff.length().powi(2) + 0.1)
+                    self.non_neighbor_repulsive_force
+                        * -diff.normalize_or_zero()
+                        * (mass * other_node_mass)
+                        / (diff.length().powi(2) + 0.1)
                 }
             })
             .sum::<Vec2>();
 
         let velocity = node.position - node.prev_position;
-        let acc = force / mass - velocity * 800.0;
+        let acc = force / mass - velocity * self.attenuation_rate;
 
         PhysicalNode {
             key: node_key,
