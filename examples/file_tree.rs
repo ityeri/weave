@@ -1,3 +1,4 @@
+use macroquad::prelude::get_fps;
 use petgraph::visit::EdgeRef;
 use glam::{DVec2, Vec2};
 use macroquad::shapes::{draw_circle, draw_line};
@@ -8,7 +9,7 @@ use macroquad::{
         mouse_wheel,
     },
     text::draw_text,
-    time::{get_fps, get_frame_time},
+    time::get_frame_time,
     window::{Conf, clear_background, next_frame, screen_height, screen_width},
 };
 use petgraph::visit::IntoEdgeReferences;
@@ -19,6 +20,7 @@ use petgraph::{
 use rand::Rng;
 use scrollrs::Projector;
 use std::collections::{HashMap, HashSet};
+use walkdir::WalkDir;
 use weave::{
     PhysicalGraph, PhysicalNode,
     updater::{DefaultUpdater, Updater},
@@ -54,35 +56,34 @@ impl Body {
     }
 }
 
+fn build_directory_graph(root_path: &str) -> StableGraph<Body, (), Directed> {
+    let mut graph = StableGraph::<Body, (), Directed>::new();
+    let mut path_to_node = HashMap::new();
+
+    for entry in WalkDir::new(root_path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path().to_path_buf();
+
+        let current_node = graph.add_node(Body::random(1.0));
+        path_to_node.insert(path.clone(), current_node);
+
+        if let Some(parent_path) = path.parent() {
+            if let Some(&parent_node) = path_to_node.get(parent_path) {
+                if parent_path != path {
+                    graph.add_edge(current_node, parent_node, ());
+                }
+            }
+        }
+    }
+
+    graph
+}
+
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut graph: StableGraph<Body, (), Directed> = StableGraph::new();
-
-    let random_radius = 10000.0;
-
-    let center_node1 = graph.add_node(Body::random(random_radius));
-    let center_node2 = graph.add_node(Body::random(random_radius));
-
-    for _ in 0..1200 {
-        let sub_node = graph.add_node(Body::random(random_radius));
-        graph.add_edge(sub_node, center_node1, ());
-    }
-
-    for _ in 0..1200 {
-        let sub_node = graph.add_node(Body::random(random_radius));
-        graph.add_edge(sub_node, center_node2, ());
-    }
-
-    graph.add_edge(center_node1, center_node2, ());
-    graph.add_edge(center_node2, center_node1, ());
+    let mut graph = build_directory_graph("TODO"); // TODO
 
     let fixed_dt = 1.0 / 60.0;
-    let updater = DefaultUpdater {
-        neighbor_edge_elasticity: 0.1,
-        neighbor_radius: 0.5,
-        non_neighbor_repulsive_force: 5000.0,
-        ..DefaultUpdater::default_setting()
-    };
+    let updater = DefaultUpdater::default_setting();
     let mut update_running = false;
 
     let mut adaptor = scrollrs::ScrollAdaptor::new(0.0, 0.0, None, None, None);
