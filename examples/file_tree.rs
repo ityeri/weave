@@ -1,17 +1,16 @@
-use macroquad::prelude::get_fps;
-use petgraph::visit::EdgeRef;
 use glam::{DVec2, Vec2};
+use macroquad::prelude::get_fps;
 use macroquad::shapes::{draw_circle, draw_line};
 use macroquad::{
     color,
     input::{
-        KeyCode, MouseButton, is_key_pressed, is_mouse_button_down, mouse_position,
-        mouse_wheel,
+        KeyCode, MouseButton, is_key_pressed, is_mouse_button_down, mouse_position, mouse_wheel,
     },
     text::draw_text,
     time::get_frame_time,
     window::{Conf, clear_background, next_frame, screen_height, screen_width},
 };
+use petgraph::visit::EdgeRef;
 use petgraph::visit::IntoEdgeReferences;
 use petgraph::{
     Directed, Direction,
@@ -20,6 +19,7 @@ use petgraph::{
 use rand::Rng;
 use scrollrs::Projector;
 use std::collections::{HashMap, HashSet};
+use std::env;
 use walkdir::WalkDir;
 use weave::{
     PhysicalGraph, PhysicalNode,
@@ -80,7 +80,12 @@ fn build_directory_graph(root_path: &str) -> StableGraph<Body, (), Directed> {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut graph = build_directory_graph("TODO"); // TODO
+    let dir_path = match env::var("RUST_ROOT_DIR") {
+        Ok(value) => value,
+        Err(_) => panic!("RUST_ROOT_DIR env var is missing"),
+    };
+
+    let mut graph = build_directory_graph(&dir_path);
 
     let fixed_dt = 1.0 / 60.0;
     let updater = DefaultUpdater::default_setting();
@@ -90,7 +95,7 @@ async fn main() {
     adaptor = adaptor.set_zoom(0.1);
 
     let mut last_mouse_pos = mouse_position();
-    let wheel_sensitivity = 0.3;
+    let wheel_sensitivity = 0.03;
 
     loop {
         let dt = get_frame_time();
@@ -188,7 +193,9 @@ async fn main() {
                 graph[node_index].position.x as f64,
                 graph[node_index].position.y as f64,
             ));
-            let degrees = graph.edges_directed(node_index, Direction::Incoming).count();
+            let degrees = graph
+                .edges_directed(node_index, Direction::Incoming)
+                .count();
             let diameter = 1.0 + degrees as f64 * 0.1;
 
             let projcted_radius = if 1.0 < adaptor.project_scale(diameter * 0.5) {
