@@ -1,151 +1,119 @@
 use super::Updater;
-use crate::{
-    PhysicalGraph,
-    stored_graph::{StoredGraph, StoredNode},
-};
+use crate::{NodeKey, PhysicalGraph, PhysicalNode};
+use glam::Vec2;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::collections::{HashMap, HashSet};
+
 pub struct DefaultUpdater {
-    pub elasticity: f64,
-    pub velocity_damping: f64,
-    pub dt_amplification: f64,
-    pub edge_length_rate: f64,
-    pub min_mass: f64,
-    pub min_protect_radius: f64,
-    pub protect_radius_gap: f64,
+    pub base_neighbor_radius: f32,
+    pub neighbor_radius: f32,
+    pub neighbor_space_ratio: f32,
+    pub mass_amplification: f32,
+    pub min_node_mass: f32,
+    pub neighbor_edge_elasticity: f32,
+    pub non_neighbor_repulsive_force: f32,
+    pub non_neighbor_distance_softning: f32,
+    pub attenuation_rate: f32,
 }
 
 impl DefaultUpdater {
     pub fn default_setting() -> Self {
         Self {
-            elasticity: 2.0,
-            velocity_damping: 1.0,
-            dt_amplification: 1.0,
-            edge_length_rate: 0.012,
-            min_mass: 1.0,
-            min_protect_radius: 1.0,
-            protect_radius_gap: 0.2,
+            base_neighbor_radius: 3.0,
+            neighbor_radius: 0.5,
+            neighbor_space_ratio: 0.2,
+            mass_amplification: 0.25,
+            min_node_mass: 1.0,
+            neighbor_edge_elasticity: 20.0,
+            non_neighbor_repulsive_force: 2000.0,
+            non_neighbor_distance_softning: 0.01,
+            attenuation_rate: 800.0,
         }
     }
 
-    fn node_update<K: Copy + Hash + Eq + Send + Sync>(
+    fn update_node<K: NodeKey>(
         &self,
-        graph: &impl PhysicalGraph<K>,
-        node_id: K,
-        dt: f64,
-    ) -> StoredNode<K> {
-        let incomings = graph.get_incomings(node_id).collect::<Vec<_>>();
-        let outgoings = graph.get_outgoings(node_id).collect::<Vec<_>>();
-        let mut neighbors: HashSet<K> = HashSet::new();
-        neighbors.extend(incomings.iter());
-        neighbors.extend(outgoings.iter());
+        graph: &PhysicalGraph<K>,
+        node_key: K,
+        dt: f32,
+    ) -> PhysicalNode<K> {
+        let node = graph.nodes.get(&node_key).unwrap();
 
-        let old_position = graph.get_position(node_id);
-        let mut position = old_position;
+        let mass = self.get_mass(&node);
+        let this_radius = self.get_neighbor_radius(&node);
 
-        let mass = self.mass(graph, node_id);
-        let inner_radius = self.inner_radius(graph, node_id);
-        let outer_radius = self.outer_radius(graph, node_id);
+        let force = graph
+            .nodes
+            .values()
+            .filter(|&node| node.key != node_key)
+            .map(|other_node| -> Vec2 {
+                let other_node_mass = self.get_mass(&other_node);
 
-        for other_node_id in graph.get_all_nodes() {
-            if other_node_id == node_id {
-                continue;
-            }
+                let edge_length = this_radius + self.get_neighbor_radius(&other_node);
 
-            if neighbors.contains(&other_node_id) {
-                // 1촌
-                // println!("1촌");
-                let relative_position = graph.get_position(other_node_id) - position;
-                let goal_distance = inner_radius + self.inner_radius(graph, other_node_id);
-                let actual_distance = relative_position.length();
-                let distance_error = goal_distance - actual_distance;
-                let other_mass = self.mass(graph, other_node_id);
+                let min_distance = edge_length * (1.0 - self.neighbor_space_ratio / 2.0)
+                    + self.base_neighbor_radius;
+                let max_distance = edge_length * (1.0 + self.neighbor_space_ratio / 2.0)
+                    + self.base_neighbor_radius;
 
-                position -= (relative_position.normalize() * distance_error * self.elasticity * dt)
-                    * (other_mass / (mass + other_mass))
-                    * self.elasticity;
-            } else {
-                // 2촌 이상
-                // println!("2촌");
-                let relative_position = graph.get_position(other_node_id) - position;
-                let min_distance = outer_radius + self.outer_radius(graph, other_node_id);
-                let actual_distance = relative_position.length();
-                let distance_error = min_distance - actual_distance;
+                let diff = other_node.position - node.position;
 
-                if 0.0 < distance_error {
-                    let other_mass = self.mass(graph, other_node_id);
-                    position -=
-                        (relative_position.normalize() * distance_error * self.elasticity * dt)
-                            * (other_mass / (mass + other_mass))
-                            * self.elasticity;
+                if node.incomings.contains(&other_node.key)
+                    || node.outgoings.contains(&other_node.key)
+                {
+                    let distance_diff = if diff.length() < min_distance {
+                        diff.length() - min_distance
+                    } else if max_distance < diff.length() {
+                        diff.length() - max_distance
+                    } else {
+                        0.0f32
+                    };
+
+                    self.neighbor_edge_elasticity
+                        * diff.normalize_or_zero()
+                        * distance_diff
+                        * mass
+                        * other_node_mass
+                } else {
+                    self.non_neighbor_repulsive_force
+                        * -diff.normalize_or_zero()
+                        * (mass * other_node_mass)
+                        / (diff.length().powi(2) + self.non_neighbor_distance_softning)
                 }
-            }
-        }
-        // println!("===\n");
+            })
+            .sum::<Vec2>();
 
-        let dt = dt * self.dt_amplification;
-        // F = ma -> a = F / m
-        let mut updated_velocity = (position - old_position) * dt;
-        updated_velocity *= self.velocity_damping;
-        let updated_position = position + updated_velocity * dt;
+        let velocity = node.position - node.prev_position;
+        let acc = force / mass - velocity * self.attenuation_rate;
 
-        StoredNode {
-            position: updated_position,
-            velocity: updated_velocity,
-            incomings: incomings,
-            outgoings: outgoings,
-            in_degree: graph.get_in_degree(node_id),
-            out_debree: graph.get_out_degree(node_id),
+        PhysicalNode {
+            key: node_key,
+            incomings: node.incomings.iter().copied().collect::<HashSet<K>>(),
+            outgoings: node.outgoings.iter().copied().collect::<HashSet<K>>(),
+            position: 2.0 * node.position - node.prev_position + acc * dt.powi(2),
+            prev_position: node.position,
         }
     }
 
-    fn mass<K: Copy + Hash + Eq>(&self, graph: &impl PhysicalGraph<K>, node_id: K) -> f64 {
-        graph.get_in_degree(node_id) as f64 + self.min_mass
+    fn get_mass<K: NodeKey>(&self, node: &PhysicalNode<K>) -> f32 {
+        self.min_node_mass + node.incomings.len() as f32 * self.mass_amplification
     }
-    fn inner_radius<K: Copy + Hash + Eq>(&self, graph: &impl PhysicalGraph<K>, node_id: K) -> f64 {
-        graph.get_in_degree(node_id) as f64 * self.edge_length_rate
-    }
-    fn outer_radius<K: Copy + Hash + Eq>(&self, graph: &impl PhysicalGraph<K>, node_id: K) -> f64 {
-        self.inner_radius(graph, node_id) * (1.0 + self.protect_radius_gap)
-            + self.min_protect_radius
+    fn get_neighbor_radius<K: NodeKey>(&self, node: &PhysicalNode<K>) -> f32 {
+        node.incomings.len() as f32 * self.neighbor_radius
     }
 }
 
 impl Updater for DefaultUpdater {
-    fn update<K: Copy + Hash + Eq + Send + Sync>(
-        &self,
-        graph: impl PhysicalGraph<K>,
-        dt: f64,
-    ) -> StoredGraph<K> {
-        let converted_graph = StoredGraph {
+    fn update<K: NodeKey>(&self, graph: PhysicalGraph<K>, dt: f32) -> PhysicalGraph<K> {
+        PhysicalGraph::<K> {
             nodes: graph
-                .get_all_nodes()
-                .map(|node_id| {
-                    (
-                        node_id,
-                        StoredNode::<K> {
-                            position: graph.get_position(node_id),
-                            velocity: graph.get_velocity(node_id),
-                            incomings: graph.get_incomings(node_id).collect::<Vec<_>>(),
-                            outgoings: graph.get_outgoings(node_id).collect::<Vec<_>>(),
-                            in_degree: graph.get_in_degree(node_id),
-                            out_debree: graph.get_out_degree(node_id),
-                        },
-                    )
-                })
-                .collect::<HashMap<K, StoredNode<K>>>(),
-        };
-
-        StoredGraph::<K> {
-            nodes: converted_graph
-                .get_all_nodes()
-                .collect::<Vec<_>>()
+                .nodes
+                .keys()
+                .copied()
+                .collect::<Vec<K>>()
                 .into_par_iter()
-                .map(|node_id| (node_id, self.node_update(&converted_graph, node_id, dt)))
-                .collect::<HashMap<K, StoredNode<K>>>(),
+                .map(|node_key| (node_key, self.update_node(&graph, node_key, dt)))
+                .collect::<HashMap<K, PhysicalNode<K>>>(),
         }
     }
 }
