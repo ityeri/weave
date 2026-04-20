@@ -1,3 +1,4 @@
+use clap::Parser;
 use glam::{DVec2, Vec2};
 use macroquad::prelude::get_fps;
 use macroquad::shapes::{draw_circle, draw_line};
@@ -19,7 +20,6 @@ use petgraph::{
 use rand::Rng;
 use scrollrs::Projector;
 use std::collections::{HashMap, HashSet};
-use std::env;
 use walkdir::WalkDir;
 use weave::{
     PhysicalGraph, PhysicalNode,
@@ -35,6 +35,14 @@ fn window_conf() -> Conf {
         window_resizable: true,
         ..Default::default()
     }
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, long_about = None)]
+struct Args {
+    path: String,
+    #[arg(short, long, default_value_t = 0.02)]
+    wheel: f64,
 }
 
 struct Body {
@@ -80,12 +88,9 @@ fn build_directory_graph(root_path: &str) -> StableGraph<Body, (), Directed> {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let dir_path = match env::var("RUST_ROOT_DIR") {
-        Ok(value) => value,
-        Err(_) => panic!("RUST_ROOT_DIR env var is missing"),
-    };
+    let args = Args::parse();
 
-    let mut graph = build_directory_graph(&dir_path);
+    let mut graph = build_directory_graph(&args.path);
 
     let fixed_dt = 1.0 / 60.0;
     let updater = DefaultUpdater::default_setting();
@@ -95,7 +100,7 @@ async fn main() {
     adaptor = adaptor.set_zoom(0.1);
 
     let mut last_mouse_pos = mouse_position();
-    let wheel_sensitivity = 0.02;
+    let wheel_sensitivity = args.wheel;
 
     loop {
         let dt = get_frame_time();
