@@ -95,7 +95,7 @@ async fn main() {
     adaptor = adaptor.set_zoom(0.1);
 
     let mut last_mouse_pos = mouse_position();
-    let wheel_sensitivity = 0.03;
+    let wheel_sensitivity = 0.02;
 
     loop {
         let dt = get_frame_time();
