@@ -216,35 +216,6 @@ async fn main() {
 
         clear_background(color::BLACK);
 
-        // let line_width = if 1.0 < adaptor.project_scale(0.08) {
-        //     adaptor.project_scale(0.08)
-        // } else {
-        //     0.5
-        // };
-        //
-        // graph.edge_references().for_each(|edge| {
-        //     let source_position = graph[edge.source()].position;
-        //     let target_position = graph[edge.target()].position;
-        //
-        //     let source_position = adaptor.project(DVec2::new(
-        //         source_position.x as f64,
-        //         source_position.y as f64,
-        //     ));
-        //     let target_position = adaptor.project(DVec2::new(
-        //         target_position.x as f64,
-        //         target_position.y as f64,
-        //     ));
-        //
-        //     draw_line(
-        //         source_position.x as f32,
-        //         source_position.y as f32,
-        //         target_position.x as f32,
-        //         target_position.y as f32,
-        //         line_width as f32,
-        //         color::DARKGRAY,
-        //     );
-        // });
-
         graph.node_indices().for_each(|node_index| {
             let position = adaptor.project(DVec2::new(
                 graph[node_index].position.x as f64,
