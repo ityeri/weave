@@ -17,6 +17,7 @@ use petgraph::{
 };
 use rand::Rng;
 use scrollrs::Projector;
+use weave::updater::QuadTreeUpdater;
 use std::collections::{HashMap, HashSet};
 use weave::{
     PhysicalGraph, PhysicalNode,
@@ -76,11 +77,11 @@ async fn main() {
     graph.add_edge(center_node2, center_node1, ());
 
     let fixed_dt = 1.0 / 60.0;
-    let updater = DefaultUpdater {
+    let updater = QuadTreeUpdater {
         neighbor_edge_elasticity: 0.1,
         neighbor_radius: 0.5,
         non_neighbor_repulsive_force: 5000.0,
-        ..DefaultUpdater::default_setting()
+        ..QuadTreeUpdater::default_setting()
     };
     let mut update_running = false;
 

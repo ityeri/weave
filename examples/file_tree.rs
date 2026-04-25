@@ -2,7 +2,7 @@ use chrono::Utc;
 use clap::Parser;
 use glam::{DVec2, Vec2};
 use macroquad::prelude::get_fps;
-use macroquad::shapes::{draw_circle, draw_line};
+use macroquad::shapes::draw_circle;
 use macroquad::{
     color,
     input::{
@@ -13,7 +13,6 @@ use macroquad::{
     window::{Conf, clear_background, next_frame, screen_height, screen_width},
 };
 use petgraph::visit::EdgeRef;
-use petgraph::visit::IntoEdgeReferences;
 use petgraph::{
     Directed, Direction,
     stable_graph::{NodeIndex, StableGraph},
@@ -23,7 +22,6 @@ use scrollrs::Projector;
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use walkdir::WalkDir;
-use weave::updater::DefaultUpdater;
 use weave::{
     PhysicalGraph, PhysicalNode,
     updater::{QuadTreeUpdater, Updater},
@@ -99,8 +97,8 @@ async fn main() {
     let mut graph = build_directory_graph(&args.path, |_| Body::random(1.0));
 
     let fixed_dt = 1.0 / 120.0;
-    let updater = DefaultUpdater {
-        ..DefaultUpdater::default_setting()
+    let updater = QuadTreeUpdater {
+        ..QuadTreeUpdater::default_setting()
     };
     let mut update_running = false;
 
