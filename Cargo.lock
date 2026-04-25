@@ -780,6 +780,7 @@ dependencies = [
 name = "weave"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "clap",
  "clock",
  "glam 0.30.10",
