@@ -38,7 +38,7 @@ struct Body {
 struct TreeNode {
     // Surprisingly, region field is not need to read..
     // only center field is required
-    // region: Rect, 
+    // region: Rect,
     center: Vec2,
     radius: f32,
     mass: f32,
@@ -46,7 +46,7 @@ struct TreeNode {
 }
 
 impl TreeNode {
-    fn create_node(bodies: Vec<&Body>, region: Rect) -> TreeNode {
+    fn create_node(bodies: Vec<&Body>, region: Rect, depth: usize, max_depth: usize) -> TreeNode {
         if bodies.is_empty() {
             return TreeNode {
                 center: Vec2::new(
@@ -80,7 +80,13 @@ impl TreeNode {
             .reduce(f32::max)
             .unwrap_or(0.0);
 
-        let children = if bodies.len() <= 1 {
+        let is_depth_over = if max_depth == 0 {
+            false
+        } else {
+            max_depth <= depth
+        };
+
+        let children = if bodies.len() <= 1 || is_depth_over {
             None
         } else {
             let center_x = (region.min_x + region.max_x) / 2.0;
@@ -102,6 +108,8 @@ impl TreeNode {
                             .filter(|&body| region.contain(body.position))
                             .collect::<Vec<&Body>>(),
                         region,
+                        depth + 1,
+                        max_depth,
                     ))
                 })
                 .collect::<Vec<Arc<TreeNode>>>(),
@@ -140,9 +148,9 @@ impl QuadTreeUpdater {
             min_node_mass: 1.0,
             neighbor_edge_elasticity: 20.0,
             non_neighbor_repulsive_force: 2000.0,
-            non_neighbor_distance_softning: 0.01,
+            non_neighbor_distance_softning: 0.1,
             attenuation_rate: 800.0,
-            max_node_radius_ratio: 0.1,
+            max_node_radius_ratio: 1.5,
         }
     }
 
@@ -175,17 +183,17 @@ impl QuadTreeUpdater {
         let bodies = graph
             .nodes
             .values()
-            .map(|node|
-                Body {
-                    position: node.position,
-                    mass: self.get_mass(node),
-                }
-            )
+            .map(|node| Body {
+                position: node.position,
+                mass: self.get_mass(node),
+            })
             .collect::<Vec<Body>>();
 
         TreeNode::create_node(
             bodies.iter().collect::<Vec<&Body>>(),
             Rect::new(min_x, min_y, max_x, max_y),
+            0,
+            127,
         )
     }
 
@@ -259,7 +267,7 @@ impl QuadTreeUpdater {
 
         // It's not enough as f32 std epsilon. Just using distance softening value is more appropriate.
         if distance <= self.non_neighbor_distance_softning {
-            return Vec2::ZERO
+            return Vec2::ZERO;
         }
 
         if tree_node.radius < distance * self.max_node_radius_ratio || tree_node.children.is_none()
