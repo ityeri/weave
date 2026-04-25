@@ -135,7 +135,7 @@ pub struct QuadTreeUpdater {
     pub non_neighbor_repulsive_force: f32,
     pub non_neighbor_distance_softning: f32,
     pub attenuation_rate: f32,
-    pub max_node_radius_ratio: f32,
+    pub max_tree_node_radius_ratio: f32,
 }
 
 impl QuadTreeUpdater {
@@ -150,7 +150,7 @@ impl QuadTreeUpdater {
             non_neighbor_repulsive_force: 2000.0,
             non_neighbor_distance_softning: 0.1,
             attenuation_rate: 800.0,
-            max_node_radius_ratio: 1.5,
+            max_tree_node_radius_ratio: 0.5,
         }
     }
 
@@ -270,7 +270,8 @@ impl QuadTreeUpdater {
             return Vec2::ZERO;
         }
 
-        if tree_node.radius < distance * self.max_node_radius_ratio || tree_node.children.is_none()
+        if tree_node.radius < distance * self.max_tree_node_radius_ratio
+            || tree_node.children.is_none()
         {
             let diff = tree_node.center - body.position;
 
