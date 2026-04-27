@@ -1,18 +1,18 @@
-use macroquad::prelude::get_fps;
-use petgraph::visit::EdgeRef;
+use chrono::Utc;
+use clap::Parser;
 use glam::{DVec2, Vec2};
-use macroquad::shapes::{draw_circle, draw_line};
+use macroquad::prelude::get_fps;
+use macroquad::shapes::draw_circle;
 use macroquad::{
     color,
     input::{
-        KeyCode, MouseButton, is_key_pressed, is_mouse_button_down, mouse_position,
-        mouse_wheel,
+        KeyCode, MouseButton, is_key_pressed, is_mouse_button_down, mouse_position, mouse_wheel,
     },
     text::draw_text,
     time::get_frame_time,
     window::{Conf, clear_background, next_frame, screen_height, screen_width},
 };
-use petgraph::visit::IntoEdgeReferences;
+use petgraph::visit::EdgeRef;
 use petgraph::{
     Directed, Direction,
     stable_graph::{NodeIndex, StableGraph},
@@ -20,10 +20,11 @@ use petgraph::{
 use rand::Rng;
 use scrollrs::Projector;
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use walkdir::WalkDir;
 use weave::{
     PhysicalGraph, PhysicalNode,
-    updater::{DefaultUpdater, Updater},
+    updater::{QuadTreeUpdater, Updater},
 };
 
 fn window_conf() -> Conf {
@@ -35,6 +36,14 @@ fn window_conf() -> Conf {
         window_resizable: true,
         ..Default::default()
     }
+}
+
+#[derive(Parser, Debug)]
+#[command(author, version, long_about = None)]
+struct Args {
+    path: String,
+    #[arg(short, long, default_value_t = 0.02)]
+    wheel: f64,
 }
 
 struct Body {
@@ -56,14 +65,17 @@ impl Body {
     }
 }
 
-fn build_directory_graph(root_path: &str) -> StableGraph<Body, (), Directed> {
-    let mut graph = StableGraph::<Body, (), Directed>::new();
+fn build_directory_graph<T>(
+    root_path: &str,
+    node_weight_func: impl Fn(&PathBuf) -> T,
+) -> StableGraph<T, (), Directed> {
+    let mut graph = StableGraph::<T, (), Directed>::new();
     let mut path_to_node = HashMap::new();
 
     for entry in WalkDir::new(root_path).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path().to_path_buf();
 
-        let current_node = graph.add_node(Body::random(1.0));
+        let current_node = graph.add_node(node_weight_func(&path));
         path_to_node.insert(path.clone(), current_node);
 
         if let Some(parent_path) = path.parent() {
@@ -80,17 +92,23 @@ fn build_directory_graph(root_path: &str) -> StableGraph<Body, (), Directed> {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut graph = build_directory_graph("TODO"); // TODO
+    let args = Args::parse();
 
-    let fixed_dt = 1.0 / 60.0;
-    let updater = DefaultUpdater::default_setting();
+    let mut graph = build_directory_graph(&args.path, |_| Body::random(1.0));
+
+    let fixed_dt = 1.0 / 120.0;
+    let updater = QuadTreeUpdater {
+        ..QuadTreeUpdater::default_setting()
+    };
     let mut update_running = false;
 
     let mut adaptor = scrollrs::ScrollAdaptor::new(0.0, 0.0, None, None, None);
     adaptor = adaptor.set_zoom(0.1);
 
+    let mut selected_node_index: Option<NodeIndex> = None;
+
     let mut last_mouse_pos = mouse_position();
-    let wheel_sensitivity = 0.3;
+    let wheel_sensitivity = args.wheel;
 
     loop {
         let dt = get_frame_time();
@@ -100,14 +118,37 @@ async fn main() {
 
         adaptor = adaptor.resized(screen_width as f64, screen_height as f64, None, None);
 
+        let (mouse_x, mouse_y) = mouse_position();
+        let projected_mouse_pos = adaptor.unproject(DVec2::new(mouse_x as f64, mouse_y as f64));
+        let projected_mouse_pos =
+            Vec2::new(projected_mouse_pos.x as f32, projected_mouse_pos.y as f32);
+
         if is_mouse_button_down(MouseButton::Left) {
-            let current_mouse_pos = mouse_position();
+            if let Some(index) = selected_node_index {
+                graph[index].prev_position = graph[index].position;
+                graph[index].position = projected_mouse_pos;
+            } else {
+                selected_node_index = graph.node_indices().find(|node_index| {
+                    let degrees = graph
+                        .edges_directed(*node_index, Direction::Incoming)
+                        .count();
+                    let diameter = 1.0 + degrees as f32 * 0.1;
 
-            let xrel = current_mouse_pos.0 - last_mouse_pos.0;
-            let yrel = current_mouse_pos.1 - last_mouse_pos.1;
+                    projected_mouse_pos.distance(graph[*node_index].position) < diameter * 0.5
+                });
+            }
 
-            let camera_delta = adaptor.unproject_scalev(DVec2::new(xrel as f64, yrel as f64));
-            adaptor = adaptor.moved(-camera_delta);
+            if selected_node_index == None {
+                let current_mouse_pos = mouse_position();
+
+                let xrel = current_mouse_pos.0 - last_mouse_pos.0;
+                let yrel = current_mouse_pos.1 - last_mouse_pos.1;
+
+                let camera_delta = adaptor.unproject_scalev(DVec2::new(xrel as f64, yrel as f64));
+                adaptor = adaptor.moved(-camera_delta);
+            }
+        } else {
+            selected_node_index = None;
         }
 
         let (_wheel_x, wheel_y) = mouse_wheel();
@@ -143,8 +184,8 @@ async fn main() {
             update_running = !update_running;
         }
 
-        if update_running {
-            let updated_graph = updater.update(physical_graph, fixed_dt);
+        if is_key_pressed(KeyCode::Period) {
+            let updated_graph = updater.update(&physical_graph, fixed_dt);
 
             for (node_index, node) in updated_graph.nodes {
                 graph[node_index].position = node.position;
@@ -152,47 +193,39 @@ async fn main() {
             }
         }
 
-        clear_background(color::BLACK);
+        let update_dt = if update_running {
+            let now = Utc::now();
+            let started_at = now.timestamp() as f64 + now.timestamp_subsec_micros() as f64 / 1e+6;
 
-        let line_width = if 1.0 < adaptor.project_scale(0.08) {
-            adaptor.project_scale(0.08)
+            let updated_graph = updater.update(&physical_graph, fixed_dt);
+
+            let now = Utc::now();
+            let done_at = now.timestamp() as f64 + now.timestamp_subsec_micros() as f64 / 1e+6;
+
+            for (node_index, node) in updated_graph.nodes {
+                graph[node_index].position = node.position;
+                graph[node_index].prev_position = node.prev_position;
+            }
+
+            done_at - started_at
         } else {
-            0.5
+            -1.0
         };
 
-        graph.edge_references().for_each(|edge| {
-            let source_position = graph[edge.source()].position;
-            let target_position = graph[edge.target()].position;
-
-            let source_position = adaptor.project(DVec2::new(
-                source_position.x as f64,
-                source_position.y as f64,
-            ));
-            let target_position = adaptor.project(DVec2::new(
-                target_position.x as f64,
-                target_position.y as f64,
-            ));
-
-            draw_line(
-                source_position.x as f32,
-                source_position.y as f32,
-                target_position.x as f32,
-                target_position.y as f32,
-                line_width as f32,
-                color::DARKGRAY,
-            );
-        });
+        clear_background(color::BLACK);
 
         graph.node_indices().for_each(|node_index| {
             let position = adaptor.project(DVec2::new(
                 graph[node_index].position.x as f64,
                 graph[node_index].position.y as f64,
             ));
-            let degrees = graph.edges_directed(node_index, Direction::Incoming).count();
+            let degrees = graph
+                .edges_directed(node_index, Direction::Incoming)
+                .count();
             let diameter = 1.0 + degrees as f64 * 0.1;
 
             let projcted_radius = if 1.0 < adaptor.project_scale(diameter * 0.5) {
-                adaptor.project_scale(diameter)
+                adaptor.project_scale(diameter * 0.5)
             } else {
                 1.0
             };
@@ -212,7 +245,20 @@ async fn main() {
             20.0,
             color::DARKGRAY,
         );
-        draw_text(&format!("DT: {:.4}", dt), 20.0, 40.0, 20.0, color::DARKGRAY);
+        draw_text(
+            &format!("Total frame DT: {:.4}", dt),
+            20.0,
+            40.0,
+            20.0,
+            color::DARKGRAY,
+        );
+        draw_text(
+            &format!("Pure update DT: {:.4}", update_dt),
+            20.0,
+            60.0,
+            20.0,
+            color::DARKGRAY,
+        );
 
         last_mouse_pos = mouse_position();
         next_frame().await

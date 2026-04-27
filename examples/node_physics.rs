@@ -1,16 +1,15 @@
-use petgraph::visit::EdgeRef;
 use glam::{DVec2, Vec2};
 use macroquad::shapes::{draw_circle, draw_line};
 use macroquad::{
     color,
     input::{
-        KeyCode, MouseButton, is_key_pressed, is_mouse_button_down, mouse_position,
-        mouse_wheel,
+        KeyCode, MouseButton, is_key_pressed, is_mouse_button_down, mouse_position, mouse_wheel,
     },
     text::draw_text,
     time::{get_fps, get_frame_time},
     window::{Conf, clear_background, next_frame, screen_height, screen_width},
 };
+use petgraph::visit::EdgeRef;
 use petgraph::visit::IntoEdgeReferences;
 use petgraph::{
     Directed, Direction,
@@ -18,6 +17,7 @@ use petgraph::{
 };
 use rand::Rng;
 use scrollrs::Projector;
+use weave::updater::QuadTreeUpdater;
 use std::collections::{HashMap, HashSet};
 use weave::{
     PhysicalGraph, PhysicalNode,
@@ -77,11 +77,11 @@ async fn main() {
     graph.add_edge(center_node2, center_node1, ());
 
     let fixed_dt = 1.0 / 60.0;
-    let updater = DefaultUpdater {
+    let updater = QuadTreeUpdater {
         neighbor_edge_elasticity: 0.1,
         neighbor_radius: 0.5,
         non_neighbor_repulsive_force: 5000.0,
-        ..DefaultUpdater::default_setting()
+        ..QuadTreeUpdater::default_setting()
     };
     let mut update_running = false;
 
@@ -143,7 +143,7 @@ async fn main() {
         }
 
         if update_running {
-            let updated_graph = updater.update(physical_graph, fixed_dt);
+            let updated_graph = updater.update(&physical_graph, fixed_dt);
 
             for (node_index, node) in updated_graph.nodes {
                 graph[node_index].position = node.position;
@@ -187,7 +187,9 @@ async fn main() {
                 graph[node_index].position.x as f64,
                 graph[node_index].position.y as f64,
             ));
-            let degrees = graph.edges_directed(node_index, Direction::Incoming).count();
+            let degrees = graph
+                .edges_directed(node_index, Direction::Incoming)
+                .count();
             let diameter = 1.0 + degrees as f64 * 0.1;
 
             let projcted_radius = if 1.0 < adaptor.project_scale(diameter * 0.5) {
