@@ -2,7 +2,7 @@ use chrono::Utc;
 use clap::Parser;
 use glam::{DVec2, Vec2};
 use macroquad::prelude::get_fps;
-use macroquad::shapes::draw_circle;
+use macroquad::shapes::{draw_circle, draw_line};
 use macroquad::{
     color,
     input::{
@@ -213,6 +213,28 @@ async fn main() {
         };
 
         clear_background(color::BLACK);
+
+        graph
+            .edge_indices()
+            .filter_map(|e| graph.edge_endpoints(e))
+            .for_each(|(source_index, target_inde)| {
+                let source_pos = graph.node_weight(source_index).unwrap().position;
+                let target_pos = graph.node_weight(target_inde).unwrap().position;
+
+                let screen_source_pos = adaptor.project(source_pos.as_dvec2()).as_vec2();
+                let screen_target_pos = adaptor.project(target_pos.as_dvec2()).as_vec2();
+
+                let projected_tickness = adaptor.project_scale(0.2) as f32;
+
+                draw_line(
+                    screen_source_pos.x,
+                    screen_source_pos.y,
+                    screen_target_pos.x,
+                    screen_target_pos.y,
+                    projected_tickness,
+                    color::GRAY,
+                );
+            });
 
         graph.node_indices().for_each(|node_index| {
             let position = adaptor.project(DVec2::new(
