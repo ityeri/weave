@@ -75,13 +75,15 @@ fn build_directory_graph<T>(
     for entry in WalkDir::new(root_path).into_iter().filter_map(|e| e.ok()) {
         let path = entry.path().to_path_buf();
 
-        let current_node = graph.add_node(node_weight_func(&path));
-        path_to_node.insert(path.clone(), current_node);
+        if path.is_dir() {
+            let current_node = graph.add_node(node_weight_func(&path));
+            path_to_node.insert(path.clone(), current_node);
 
-        if let Some(parent_path) = path.parent() {
-            if let Some(&parent_node) = path_to_node.get(parent_path) {
-                if parent_path != path {
-                    graph.add_edge(current_node, parent_node, ());
+            if let Some(parent_path) = path.parent() {
+                if let Some(&parent_node) = path_to_node.get(parent_path) {
+                    if parent_path != path {
+                        graph.add_edge(current_node, parent_node, ());
+                    }
                 }
             }
         }
