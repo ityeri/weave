@@ -9,7 +9,7 @@ weave is a simple physics engine for a force-directed node graph
 _weave is not yet distributed in crates.io_
 
 ```toml
-weave = { git = "https://github.com/ityeri/weave", tag = "v0.1.0" }
+weave = { git = "https://github.com/ityeri/weave", tag = "v0.2.0" }
 ```
 
 # demos
