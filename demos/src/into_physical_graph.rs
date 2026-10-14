@@ -5,12 +5,11 @@ use weave::{NodeKey, PhysicalGraph, PhysicalNode};
 
 use crate::body::Body;
 
-pub trait PhysicalGraphBuilder<K: NodeKey> {
-    fn to_physical_graph(&self) -> PhysicalGraph<K>;
+pub trait IntoPhysicalGraph<K: NodeKey> {
+    fn into_physical_graph(&self) -> PhysicalGraph<K>;
 }
-
-impl PhysicalGraphBuilder<NodeIndex> for StableGraph<Body, (), Directed> {
-    fn to_physical_graph(&self) -> PhysicalGraph<NodeIndex> {
+impl IntoPhysicalGraph<NodeIndex> for StableGraph<Body, (), Directed> {
+    fn into_physical_graph(&self) -> PhysicalGraph<NodeIndex> {
         PhysicalGraph::new(
             self.node_indices()
                 .map(|node_index| {

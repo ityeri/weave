@@ -1,11 +1,11 @@
 use chrono::Utc;
 use glam::{DVec2, Vec2};
 use macroquad::{
-    color,
+    color::{self, Color},
     input::{
         KeyCode, MouseButton, is_key_pressed, is_mouse_button_down, mouse_position, mouse_wheel,
     },
-    shapes::{draw_circle, draw_line},
+    shapes::{draw_circle, draw_line, draw_rectangle},
     text::draw_text,
     time::{get_fps, get_frame_time},
     window::{Conf, next_frame, screen_height, screen_width},
@@ -17,27 +17,51 @@ pub struct RenderingShapeSet {
     pub points: Vec<Point>,
     pub lines: Vec<Line>,
 }
+
 pub struct Point {
     pub position: Vec2,
     pub radius: f32,
+    pub color: Color,
+    pub shape: Shape,
+}
+#[derive(Clone, Copy)]
+pub enum Shape {
+    Circle,
+    Square,
 }
 impl Point {
-    pub fn new(position: Vec2, radius: f32) -> Self {
-        Point { position, radius }
-    }
-}
-pub struct Line {
-    pub a: Vec2,
-    pub b: Vec2,
-}
-impl Line {
-    pub fn new(a: Vec2, b: Vec2) -> Self {
-        Line { a, b }
+    pub fn new(position: Vec2, radius: f32, color: Color, shape: Shape) -> Self {
+        Point {
+            position,
+            radius,
+            color,
+            shape,
+        }
     }
 }
 
-pub fn run<Tf, Rf>(window_conf: Conf, mut ticking_func: Tf, mut rendering_func: Rf)
-where
+pub struct Line {
+    pub a: Vec2,
+    pub b: Vec2,
+    pub color: Color,
+}
+impl Line {
+    pub fn new(a: Vec2, b: Vec2, color: Color) -> Self {
+        Line { a, b, color }
+    }
+}
+
+#[derive(Clone)]
+pub struct MouseConf {
+    pub wheel_sensitivity: f64,
+}
+
+pub fn run<Tf, Rf>(
+    window_conf: Conf,
+    mouse_conf: MouseConf,
+    mut ticking_func: Tf,
+    mut rendering_func: Rf,
+) where
     Tf: FnMut() -> () + std::marker::Send + 'static,
     Rf: FnMut() -> RenderingShapeSet + 'static,
 {
@@ -55,8 +79,7 @@ where
         },
         async move {
             let mut adaptor = scrollrs::ScrollAdaptor::new(0.0, 0.0, None, None, None);
-            adaptor = adaptor.set_zoom(0.1);
-            let wheel_sensitivity = 0.03;
+            adaptor = adaptor.set_zoom(0.001);
 
             let mut last_mouse_pos = mouse_position();
 
@@ -114,7 +137,7 @@ where
                 }
 
                 let (_wheel_x, wheel_y) = mouse_wheel();
-                let zoom_amount = wheel_y as f64 * wheel_sensitivity;
+                let zoom_amount = wheel_y as f64 * mouse_conf.wheel_sensitivity;
                 adaptor = adaptor.zoom(zoom_amount);
 
                 adaptor = adaptor.updated(dt as f64);
@@ -126,10 +149,6 @@ where
                 }
 
                 let shape_set = rendering_func();
-                // let shape_set = RenderingShapeSet {
-                //     points: vec![],
-                //     lines: vec![],
-                // };
 
                 shape_set.lines.iter().for_each(|line| {
                     let projected_a = adaptor.project(line.a.as_dvec2()).as_vec2();
@@ -143,19 +162,28 @@ where
                         projected_b.x,
                         projected_b.y,
                         projected_tickness,
-                        color::GRAY,
+                        line.color,
                     );
                 });
                 shape_set.points.iter().for_each(|point| {
                     let projected_pos = adaptor.project(point.position.as_dvec2()).as_vec2();
                     let projected_radius = adaptor.project_scale(point.radius as f64) as f32;
 
-                    draw_circle(
-                        projected_pos.x,
-                        projected_pos.y,
-                        projected_radius,
-                        color::WHITE,
-                    )
+                    match point.shape {
+                        Shape::Circle => draw_circle(
+                            projected_pos.x,
+                            projected_pos.y,
+                            projected_radius,
+                            point.color,
+                        ),
+                        Shape::Square => draw_rectangle(
+                            projected_pos.x - projected_radius,
+                            projected_pos.y - projected_radius,
+                            projected_radius * 2.0,
+                            projected_radius * 2.0,
+                            point.color,
+                        ),
+                    }
                 });
 
                 draw_text(
