@@ -213,15 +213,12 @@ impl QuadTreeUpdater {
         };
         let global_force = self.calculate_tree_node_force(&body, tree_node);
 
-        let neighbor_force = graph
-            .nodes
-            .values()
-            .filter(|&other_node| {
-                other_node.key != node.key
-                    && (node.incomings.contains(&other_node.key)
-                        || node.outgoings.contains(&other_node.key))
-            })
-            .map(|other_node| -> Vec2 {
+        let neighbor_force = node
+            .incomings
+            .iter()
+            .chain(node.outgoings.iter())
+            .map(|other_node_key| -> Vec2 {
+                let other_node = graph.nodes.get(other_node_key).unwrap();
                 let other_node_mass = self.get_mass(&other_node);
 
                 let edge_length = this_radius + self.get_neighbor_radius(&other_node);

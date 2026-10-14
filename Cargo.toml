@@ -1,18 +1,11 @@
 [package]
 name = "weave"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 
 [dependencies]
 glam = "0.30.10"
 rayon = "1.11.0"
 
-[dev-dependencies]
-chrono = "0.4.44"
-clap = { version = "4.6.1", features = ["derive"] }
-walkdir = "2.5.0"
-macroquad = "0.4.14"
-petgraph = "0.8.2"
-rand = "0.9.0"
-scrollrs = { git = "https://github.com/ityeri/scrollrs.git", version = "0.1.0" }
-clock = { git = "https://github.com/ityeri/clock.git", version = "0.1.0" }
+[workspace]
+members = ["demos"]
